@@ -13,24 +13,20 @@ export class PdfRendererService {
 
   async renderPdfToImage(pdfPath: string, outputPath: string, width?: number): Promise<string> {
     const tempDir = os.tmpdir();
-    const outputFile = path.join(tempDir, `rendered_${Date.now()}.png`);
+    const outputBase = path.join(tempDir, `rendered_${Date.now()}`);
 
-    try {
-      const widthArg = width ? `-r ${Math.floor(width * 72 / 576)}` : '';
-      const cmd = `pdftoppm -png -singlefile ${widthArg} "${pdfPath}" "${outputFile.replace('.png', '')}"`;
-      
-      this.logger.debug(`Executing: ${cmd}`);
-      await execAsync(cmd);
+    const dpi = width ? Math.floor((width / 80) * 203) : 203;
+    const cmd = `pdftoppm -pbm -r ${dpi} -singlefile "${pdfPath}" "${outputBase}"`;
 
-      if (!fs.existsSync(outputFile)) {
-        throw new Error('Failed to render PDF');
-      }
+    this.logger.debug(`Executing: ${cmd}`);
+    await execAsync(cmd);
 
-      return outputFile;
-    } catch (error) {
-      this.logger.error(`PDF rendering failed: ${error.message}`);
-      throw error;
+    const outputFile = `${outputBase}.pbm`;
+    if (!fs.existsSync(outputFile)) {
+      throw new Error('Failed to render PDF');
     }
+
+    return outputFile;
   }
 
   async cleanup(filePath: string): Promise<void> {
