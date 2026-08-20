@@ -162,6 +162,10 @@ export class PdfService {
     strips.push(Buffer.from([ESC, 0x40]));
     strips.push(Buffer.from([ESC, 0x61, 0x00]));
 
+    const density = parseInt(process.env.BIXOLON_DENSITY || '8');
+    strips.push(Buffer.from([0x12, 0x23, density & 0xff]));
+    this.logger.log(`[ESC/POS] Density: ${density}`);
+
     if (mode === 'gs-v0') {
       return this.buildGsV0(pixels, imgWidth, imgHeight, strips);
     }
