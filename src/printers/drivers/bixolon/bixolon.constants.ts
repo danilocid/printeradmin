@@ -1,0 +1,6 @@
+export const BIXOLON_CONSTANTS = {
+  DEFAULT_WIDTH: 576,
+  DEVICE_PATH: '/dev/usb/lp0',
+  VENDOR_ID: 0x1504,
+  PRODUCT_ID: 0x0098,
+};

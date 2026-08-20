@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  print-server:
+    build: .
+    container_name: print-server
+    restart: unless-stopped
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      API_KEY: ${API_KEY:-change-me}
+
+      BIXOLON_DEVICE: /dev/usb/lp0
+      BIXOLON_WIDTH: 576
+
+      XPRINTER_DEVICE: /dev/usb/lp1
+      XPRINTER_WIDTH: 400
+      XPRINTER_HEIGHT: 300
+      XPRINTER_DPI: 203
+
+    devices:
+      - /dev/usb/lp0:/dev/usb/lp0
+      # Uncomment when XPrinter is connected:
+      # - /dev/usb/lp1:/dev/usb/lp1

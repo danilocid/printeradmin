@@ -1,0 +1,6 @@
+export const XPRINTER_CONSTANTS = {
+  DEFAULT_WIDTH: 400,
+  DEFAULT_HEIGHT: 300,
+  DEFAULT_DPI: 203,
+  DEVICE_PATH: '/dev/usb/lp1',
+};
