@@ -23,7 +23,7 @@ export class PdfService {
     private readonly printersService: PrintersService,
   ) {}
 
-  async processPdf(printerId: string, file: MultipartFile) {
+  async processPdf(printerId: string, file: MultipartFile, mode: 'gs-v0' | 'esc-star-0' | 'esc-star-1' | 'esc-star-33' = 'gs-v0') {
     this.logger.log(`[PDF] Starting processing for printer="${printerId}" file="${file.originalname}" size=${file.size} bytes`);
 
     const tempDir = path.join(os.tmpdir(), `print-server-${Date.now()}`);
@@ -56,8 +56,8 @@ export class PdfService {
       const scaledWidthBytes = Math.ceil(targetWidth / 8);
       this.logger.log(`[PDF] Step 3 OK: Scaled to ${targetWidth}x${scaledHeight} (pixel_data=${scaledPixels.length} bytes, expected=${scaledWidthBytes * scaledHeight})`);
 
-      this.logger.log(`[PDF] Step 4/5: Building ESC/POS raster command...`);
-      const escposData = this.imageToEscPos(scaledPixels, targetWidth, scaledHeight);
+      this.logger.log(`[PDF] Step 4/5: Building ESC/POS raster command (mode=${mode})...`);
+      const escposData = this.imageToEscPos(scaledPixels, targetWidth, scaledHeight, mode);
       this.logger.log(`[PDF] Step 4 OK: ESC/POS buffer built (${escposData.length} bytes total)`);
       this.logger.log(`[PDF] ESC/POS header (first 32 bytes): ${escposData.slice(0, 32).toString('hex')}`);
       this.logger.log(`[PDF] ESC/POS structure: INIT=${escposData.slice(0,2).toString('hex')} CENTER=${escposData.slice(2,5).toString('hex')} RASTER_CMD=${escposData.slice(5,9).toString('hex')} WIDTH=${escposData.slice(9,11).toString('hex')} HEIGHT=${escposData.slice(11,13).toString('hex')} PIXELS=${scaledPixels.length}bytes FEED_CUT=${escposData.slice(13 + scaledPixels.length).toString('hex')}`);
@@ -153,25 +153,31 @@ export class PdfService {
     return scaled;
   }
 
-  private imageToEscPos(pixels: Buffer, imgWidth: number, imgHeight: number): Buffer {
+  imageToEscPos(pixels: Buffer, imgWidth: number, imgHeight: number, mode: 'gs-v0' | 'esc-star-0' | 'esc-star-1' | 'esc-star-33' = 'gs-v0'): Buffer {
     const ESC = 0x1b;
     const GS = 0x1d;
     const widthBytes = Math.ceil(imgWidth / 8);
     const strips: Buffer[] = [];
 
     strips.push(Buffer.from([ESC, 0x40]));
-    strips.push(Buffer.from([ESC, 0x61, 0x01]));
+    strips.push(Buffer.from([ESC, 0x61, 0x00]));
 
-    const dotsPerStrip = 24;
+    if (mode === 'gs-v0') {
+      return this.buildGsV0(pixels, imgWidth, imgHeight, strips);
+    }
+
+    const dotsPerStrip = (mode === 'esc-star-33') ? 24 : 9;
+    const bytesPerCol = (mode === 'esc-star-33') ? 3 : 1;
+    const mParam = (mode === 'esc-star-1') ? 1 : (mode === 'esc-star-33') ? 33 : 0;
     const numStrips = Math.ceil(imgHeight / dotsPerStrip);
-    this.logger.log(`[ESC/POS] Using ESC * m=33 (24-dot), ${numStrips} strips for ${imgWidth}x${imgHeight}`);
+    this.logger.log(`[ESC/POS] Using ESC * m=${mParam} (${dotsPerStrip}-dot), ${numStrips} strips for ${imgWidth}x${imgHeight}`);
 
     for (let strip = 0; strip < numStrips; strip++) {
       const yStart = strip * dotsPerStrip;
 
       const columnData: number[] = [];
       for (let x = 0; x < imgWidth; x++) {
-        for (let byteIdx = 0; byteIdx < 3; byteIdx++) {
+        for (let byteIdx = 0; byteIdx < bytesPerCol; byteIdx++) {
           let byte = 0;
           for (let bit = 0; bit < 8; bit++) {
             const srcY = yStart + byteIdx * 8 + bit;
@@ -190,7 +196,7 @@ export class PdfService {
 
       const dataLen = columnData.length;
       const cmd = Buffer.from([
-        ESC, 0x2A, 33,
+        ESC, 0x2A, mParam,
         dataLen & 0xff, (dataLen >> 8) & 0xff,
       ]);
       const data = Buffer.from(columnData);
@@ -200,6 +206,29 @@ export class PdfService {
     }
 
     strips.push(Buffer.from([ESC, 0x32]));
+    strips.push(Buffer.from([GS, 0x56, 0x00]));
+
+    return Buffer.concat(strips);
+  }
+
+  private buildGsV0(pixels: Buffer, imgWidth: number, imgHeight: number, strips: Buffer[]): Buffer {
+    const GS = 0x1d;
+    const widthBytes = Math.ceil(imgWidth / 8);
+
+    const m = 0x00;
+    const p = widthBytes;
+    const q = imgHeight;
+
+    const rasterCmd = Buffer.from([
+      GS, 0x76, 0x30, m,
+      p & 0xff, (p >> 8) & 0xff,
+      q & 0xff, (q >> 8) & 0xff,
+    ]);
+
+    strips.push(rasterCmd);
+    strips.push(pixels);
+
+    strips.push(Buffer.from([0x1b, 0x32]));
     strips.push(Buffer.from([GS, 0x56, 0x00]));
 
     return Buffer.concat(strips);

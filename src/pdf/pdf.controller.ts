@@ -1,5 +1,5 @@
-import { Controller, Post, HttpCode, HttpStatus, Req, BadRequestException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiConsumes } from '@nestjs/swagger';
+import { Controller, Post, HttpCode, HttpStatus, Req, BadRequestException, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiConsumes, ApiQuery } from '@nestjs/swagger';
 import { PdfService } from './pdf.service';
 import { FastifyRequest } from 'fastify';
 
@@ -21,6 +21,7 @@ export class PdfController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Print PDF on Bixolon' })
   @ApiConsumes('multipart/form-data')
+  @ApiQuery({ name: 'mode', required: false, enum: ['gs-v0', 'esc-star-0', 'esc-star-1', 'esc-star-33'], description: 'ESC/POS image command mode' })
   @ApiBody({
     schema: {
       type: 'object',
@@ -30,9 +31,12 @@ export class PdfController {
     },
   })
   @ApiResponse({ status: 200, description: 'PDF sent to printer' })
-  async printBixolonPdf(@Req() request: FastifyRequest) {
+  async printBixolonPdf(
+    @Req() request: FastifyRequest,
+    @Query('mode') mode?: 'gs-v0' | 'esc-star-0' | 'esc-star-1' | 'esc-star-33',
+  ) {
     const file = await this.extractFile(request);
-    return this.pdfService.processPdf('bixolon', file);
+    return this.pdfService.processPdf('bixolon', file, mode || 'gs-v0');
   }
 
   @Post('xprinter/pdf')
