@@ -160,7 +160,7 @@ export class PdfService {
     const strips: Buffer[] = [];
 
     strips.push(Buffer.from([ESC, 0x40]));
-    strips.push(Buffer.from([ESC, 0x61, 0x01]));
+    strips.push(Buffer.from([ESC, 0x61, 0x00]));
 
     if (mode === 'gs-v0') {
       return this.buildGsV0(pixels, imgWidth, imgHeight, strips);
@@ -215,11 +215,6 @@ export class PdfService {
     const GS = 0x1d;
     const widthBytes = Math.ceil(imgWidth / 8);
 
-    const inverted = Buffer.alloc(pixels.length);
-    for (let i = 0; i < pixels.length; i++) {
-      inverted[i] = ~pixels[i] & 0xff;
-    }
-
     const m = 0x00;
     const p = widthBytes;
     const q = imgHeight;
@@ -231,7 +226,7 @@ export class PdfService {
     ]);
 
     strips.push(rasterCmd);
-    strips.push(inverted);
+    strips.push(pixels);
 
     strips.push(Buffer.from([0x1b, 0x32]));
     strips.push(Buffer.from([GS, 0x56, 0x00]));
