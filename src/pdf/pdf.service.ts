@@ -31,18 +31,22 @@ export class PdfService {
     await fs.promises.writeFile(pdfPath, file.buffer);
 
     try {
-      const width = printerId === 'bixolon'
+      const targetWidth = printerId === 'bixolon'
         ? parseInt(process.env.BIXOLON_WIDTH || '576')
         : parseInt(process.env.XPRINTER_WIDTH || '400');
 
-      const pbmPath = await this.pdfRendererService.renderPdfToImage(pdfPath, '', width);
+      const pbmPath = await this.pdfRendererService.renderPdfToImage(pdfPath, '', targetWidth);
       this.logger.log(`PDF rendered to PBM: ${pbmPath}`);
 
       const pbmData = await fs.promises.readFile(pbmPath);
       const { width: imgWidth, height: imgHeight, pixels } = this.parsePbm(pbmData);
       this.logger.log(`PBM parsed: ${imgWidth}x${imgHeight}`);
 
-      const escposData = this.imageToEscPos(pixels, imgWidth, imgHeight);
+      const scaledPixels = this.scalePbm(pixels, imgWidth, imgHeight, targetWidth);
+      const scaledHeight = Math.floor(imgHeight * (targetWidth / imgWidth));
+      this.logger.log(`Scaled to: ${targetWidth}x${scaledHeight}`);
+
+      const escposData = this.imageToEscPos(scaledPixels, targetWidth, scaledHeight);
       this.logger.log(`Image converted to ESC/POS: ${escposData.length} bytes`);
 
       await this.printersService.printRaw(printerId, escposData);
@@ -107,6 +111,30 @@ export class PdfService {
     const pixels = data.slice(offset);
 
     return { width, height, pixels };
+  }
+
+  private scalePbm(pixels: Buffer, srcWidth: number, srcHeight: number, targetWidth: number): Buffer {
+    const targetHeight = Math.floor(srcHeight * (targetWidth / srcWidth));
+    const targetWidthBytes = Math.ceil(targetWidth / 8);
+    const scaled = Buffer.alloc(targetHeight * targetWidthBytes);
+
+    for (let y = 0; y < targetHeight; y++) {
+      const srcY = Math.floor(y * srcHeight / targetHeight);
+      for (let x = 0; x < targetWidth; x++) {
+        const srcX = Math.floor(x * srcWidth / targetWidth);
+        const srcByteIndex = srcY * Math.ceil(srcWidth / 8) + Math.floor(srcX / 8);
+        const srcBitIndex = 7 - (srcX % 8);
+        const bit = (pixels[srcByteIndex] >> srcBitIndex) & 1;
+
+        const targetByteIndex = y * targetWidthBytes + Math.floor(x / 8);
+        const targetBitIndex = 7 - (x % 8);
+        if (bit) {
+          scaled[targetByteIndex] |= (1 << targetBitIndex);
+        }
+      }
+    }
+
+    return scaled;
   }
 
   private imageToEscPos(pixels: Buffer, imgWidth: number, imgHeight: number): Buffer {

@@ -15,7 +15,7 @@ export class PdfRendererService {
     const tempDir = os.tmpdir();
     const outputBase = path.join(tempDir, `rendered_${Date.now()}`);
 
-    const dpi = width ? Math.floor((width / 80) * 203) : 203;
+    const dpi = 203;
     const cmd = `pdftoppm -mono -r ${dpi} -singlefile "${pdfPath}" "${outputBase}"`;
 
     this.logger.debug(`Executing: ${cmd}`);
