@@ -108,9 +108,6 @@ export class PrintersController {
     parts.push(Buffer.from([ESC, 0x40]));
     parts.push(Buffer.from([ESC, 0x61, 0x00]));
 
-    const density = parseInt(process.env.BIXOLON_DENSITY || '8');
-    parts.push(Buffer.from([0x12, 0x23, density & 0xff]));
-
     if (mode === 'gs-v0') {
       parts.push(Buffer.from([
         GS, 0x76, 0x30, 0x00,

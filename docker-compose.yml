@@ -17,7 +17,6 @@ services:
       BIXOLON_DEVICE: /dev/usb/lp0
       BIXOLON_WIDTH: 576
       BIXOLON_PRINT_WIDTH: 480
-      BIXOLON_DENSITY: 8
       BIXOLON_USE_DD: "true"
 
       XPRINTER_DEVICE: /dev/usb/lp1
