@@ -144,7 +144,7 @@ export class PdfService {
 
         const targetByteIndex = y * targetWidthBytes + Math.floor(x / 8);
         const targetBitIndex = 7 - (x % 8);
-        if (bit) {
+        if (bit === 0) {
           scaled[targetByteIndex] |= (1 << targetBitIndex);
         }
       }
