@@ -63,7 +63,11 @@ export class PdfService {
       this.logger.log(`[PDF] ESC/POS structure: INIT=${escposData.slice(0,2).toString('hex')} CENTER=${escposData.slice(2,5).toString('hex')} RASTER_CMD=${escposData.slice(5,9).toString('hex')} WIDTH=${escposData.slice(9,11).toString('hex')} HEIGHT=${escposData.slice(11,13).toString('hex')} PIXELS=${scaledPixels.length}bytes FEED_CUT=${escposData.slice(13 + scaledPixels.length).toString('hex')}`);
       this.logger.log(`[PDF] Raster command details: GS_v_0=${escposData[5].toString(16)}_${escposData[6].toString(16)}_${escposData[7].toString(16)}_${escposData[8].toString(16)} width_bytes=${escposData[9] | (escposData[10] << 8)} height=${escposData[11] | (escposData[12] << 8)}`);
 
-      this.logger.log(`[PDF] Step 5/5: Sending ${escposData.length} bytes to printer "${printerId}" via USB...`);
+      this.logger.log(`[PDF] Step 5/5: Sending density + ${escposData.length} bytes to printer "${printerId}" via USB...`);
+      const density = parseInt(process.env.BIXOLON_DENSITY || '8');
+      const densityCmd = Buffer.from([0x12, 0x23, density & 0xff]);
+      await this.printersService.printRaw(printerId, densityCmd);
+      await new Promise(resolve => setTimeout(resolve, 100));
       await this.printersService.printRaw(printerId, escposData);
       this.logger.log(`[PDF] Step 5 OK: All bytes written to USB device successfully`);
 
