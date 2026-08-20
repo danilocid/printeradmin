@@ -140,12 +140,9 @@ export class PdfService {
   private imageToEscPos(pixels: Buffer, imgWidth: number, imgHeight: number): Buffer {
     const ESC = 0x1b;
     const GS = 0x1d;
-    const v = 0x76;
-    const m = 0x00;
-    const fn = 0x00;
 
     const init = Buffer.from([ESC, 0x40]);
-    const rasterCmd = Buffer.from([GS, v, m, fn]);
+    const rasterCmd = Buffer.from([GS, 0x76, 0x30, 0x00]);
 
     const widthBytes = Math.ceil(imgWidth / 8);
     const widthBytesBuf = Buffer.from([widthBytes & 0xff, (widthBytes >> 8) & 0xff]);
