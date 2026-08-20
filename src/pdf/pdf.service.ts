@@ -144,7 +144,7 @@ export class PdfService {
 
         const targetByteIndex = y * targetWidthBytes + Math.floor(x / 8);
         const targetBitIndex = 7 - (x % 8);
-        if (bit === 0) {
+        if (bit) {
           scaled[targetByteIndex] |= (1 << targetBitIndex);
         }
       }
@@ -156,18 +156,52 @@ export class PdfService {
   private imageToEscPos(pixels: Buffer, imgWidth: number, imgHeight: number): Buffer {
     const ESC = 0x1b;
     const GS = 0x1d;
-
-    const init = Buffer.from([ESC, 0x40]);
-    const rasterCmd = Buffer.from([GS, 0x76, 0x30, 0x00]);
-
     const widthBytes = Math.ceil(imgWidth / 8);
-    const widthBytesBuf = Buffer.from([widthBytes & 0xff, (widthBytes >> 8) & 0xff]);
-    const heightBuf = Buffer.from([imgHeight & 0xff, (imgHeight >> 8) & 0xff]);
+    const strips: Buffer[] = [];
 
-    const center = Buffer.from([ESC, 0x61, 0x01]);
-    const feed = Buffer.from([ESC, 0x64, 3]);
-    const cut = Buffer.from([GS, 0x56, 0x00]);
+    strips.push(Buffer.from([ESC, 0x40]));
+    strips.push(Buffer.from([ESC, 0x61, 0x01]));
 
-    return Buffer.concat([init, center, rasterCmd, widthBytesBuf, heightBuf, pixels, feed, cut]);
+    const dotsPerStrip = 24;
+    const numStrips = Math.ceil(imgHeight / dotsPerStrip);
+    this.logger.log(`[ESC/POS] Using ESC * m=33 (24-dot), ${numStrips} strips for ${imgWidth}x${imgHeight}`);
+
+    for (let strip = 0; strip < numStrips; strip++) {
+      const yStart = strip * dotsPerStrip;
+
+      const columnData: number[] = [];
+      for (let x = 0; x < imgWidth; x++) {
+        for (let byteIdx = 0; byteIdx < 3; byteIdx++) {
+          let byte = 0;
+          for (let bit = 0; bit < 8; bit++) {
+            const srcY = yStart + byteIdx * 8 + bit;
+            if (srcY < imgHeight) {
+              const srcByteIndex = srcY * widthBytes + Math.floor(x / 8);
+              const srcBitIndex = 7 - (x % 8);
+              const bitVal = (pixels[srcByteIndex] >> srcBitIndex) & 1;
+              if (bitVal) {
+                byte |= (0x80 >> bit);
+              }
+            }
+          }
+          columnData.push(byte);
+        }
+      }
+
+      const dataLen = columnData.length;
+      const cmd = Buffer.from([
+        ESC, 0x2A, 33,
+        dataLen & 0xff, (dataLen >> 8) & 0xff,
+      ]);
+      const data = Buffer.from(columnData);
+      const lf = Buffer.from([0x0A]);
+
+      strips.push(cmd, data, lf);
+    }
+
+    strips.push(Buffer.from([ESC, 0x32]));
+    strips.push(Buffer.from([GS, 0x56, 0x00]));
+
+    return Buffer.concat(strips);
   }
 }
