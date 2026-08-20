@@ -33,14 +33,11 @@ export class PdfService {
     await fs.promises.writeFile(pdfPath, file.buffer);
 
     try {
-      const paperWidth = printerId === 'bixolon'
-        ? parseInt(process.env.BIXOLON_WIDTH || '576')
-        : parseInt(process.env.XPRINTER_WIDTH || '400');
       const printWidth = printerId === 'bixolon'
-        ? parseInt(process.env.BIXOLON_PRINT_WIDTH || '512')
-        : paperWidth;
+        ? parseInt(process.env.BIXOLON_PRINT_WIDTH || '480')
+        : parseInt(process.env.XPRINTER_WIDTH || '400');
 
-      this.logger.log(`[PDF] Paper width: ${paperWidth}px, Print width: ${printWidth}px`);
+      this.logger.log(`[PDF] Print width: ${printWidth}px`);
 
       this.logger.log(`[PDF] Step 1/5: Rendering PDF to PBM with pdftoppm at 203 DPI...`);
       const pbmPath = await this.pdfRendererService.renderPdfToImage(pdfPath, '', printWidth);
@@ -59,12 +56,8 @@ export class PdfService {
       const scaledWidthBytes = Math.ceil(printWidth / 8);
       this.logger.log(`[PDF] Step 3 OK: Scaled to ${printWidth}x${scaledHeight} (pixel_data=${scaledPixels.length} bytes, expected=${scaledWidthBytes * scaledHeight})`);
 
-      this.logger.log(`[PDF] Step 3.5: Centering ${printWidth}px image on ${paperWidth}px paper...`);
-      const centeredPixels = this.centerImageOnPaper(scaledPixels, printWidth, scaledHeight, paperWidth);
-      this.logger.log(`[PDF] Step 3.5 OK: Centered image is ${paperWidth}x${scaledHeight} (${centeredPixels.length} bytes)`);
-
       this.logger.log(`[PDF] Step 4/5: Building ESC/POS raster command (mode=${mode})...`);
-      const escposData = this.imageToEscPos(centeredPixels, paperWidth, scaledHeight, mode);
+      const escposData = this.imageToEscPos(scaledPixels, printWidth, scaledHeight, mode);
       this.logger.log(`[PDF] Step 4 OK: ESC/POS buffer built (${escposData.length} bytes total)`);
       this.logger.log(`[PDF] ESC/POS header (first 32 bytes): ${escposData.slice(0, 32).toString('hex')}`);
       this.logger.log(`[PDF] ESC/POS structure: INIT=${escposData.slice(0,2).toString('hex')} CENTER=${escposData.slice(2,5).toString('hex')} RASTER_CMD=${escposData.slice(5,9).toString('hex')} WIDTH=${escposData.slice(9,11).toString('hex')} HEIGHT=${escposData.slice(11,13).toString('hex')} PIXELS=${scaledPixels.length}bytes FEED_CUT=${escposData.slice(13 + scaledPixels.length).toString('hex')}`);
@@ -158,32 +151,6 @@ export class PdfService {
     }
 
     return scaled;
-  }
-
-  private centerImageOnPaper(srcPixels: Buffer, srcWidth: number, height: number, paperWidth: number): Buffer {
-    const srcWidthBytes = Math.ceil(srcWidth / 8);
-    const paperWidthBytes = Math.ceil(paperWidth / 8);
-    const leftPad = Math.floor((paperWidth - srcWidth) / 2);
-    const leftPadBytes = Math.floor(leftPad / 8);
-    const leftPadBits = leftPad % 8;
-
-    const result = Buffer.alloc(paperWidthBytes * height);
-
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < srcWidth; x++) {
-        const srcByteIdx = y * srcWidthBytes + Math.floor(x / 8);
-        const srcBitIdx = 7 - (x % 8);
-        const bit = (srcPixels[srcByteIdx] >> srcBitIdx) & 1;
-        if (bit) {
-          const dstX = leftPad + x;
-          const dstByteIdx = y * paperWidthBytes + Math.floor(dstX / 8);
-          const dstBitIdx = 7 - (dstX % 8);
-          result[dstByteIdx] |= (1 << dstBitIdx);
-        }
-      }
-    }
-
-    return result;
   }
 
   imageToEscPos(pixels: Buffer, imgWidth: number, imgHeight: number, mode: 'gs-v0' | 'esc-star-0' | 'esc-star-1' | 'esc-star-33' = 'gs-v0'): Buffer {
