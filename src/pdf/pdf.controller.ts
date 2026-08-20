@@ -55,24 +55,20 @@ export class PdfController {
 
   private async extractFile(request: FastifyRequest): Promise<MultipartFile> {
     try {
-      const parts = (request as any).files();
-      if (!parts) {
-        throw new BadRequestException('No multipart data found');
+      const data = await request.file();
+      if (!data) {
+        throw new BadRequestException('No file uploaded');
       }
 
-      for await (const file of parts) {
-        const buffer = await file.toBuffer();
-        return {
-          fieldname: file.fieldname,
-          originalname: file.filename,
-          encoding: file.encoding,
-          mimetype: file.mimetype,
-          buffer,
-          size: buffer.length,
-        };
-      }
-
-      throw new BadRequestException('No file uploaded');
+      const buffer = await data.toBuffer();
+      return {
+        fieldname: data.fieldname,
+        originalname: data.filename,
+        encoding: data.encoding,
+        mimetype: data.mimetype,
+        buffer,
+        size: buffer.length,
+      };
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
