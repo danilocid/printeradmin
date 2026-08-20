@@ -18,13 +18,19 @@ export class PdfRendererService {
     const dpi = 203;
     const cmd = `pdftoppm -mono -r ${dpi} -singlefile "${pdfPath}" "${outputBase}"`;
 
-    this.logger.debug(`Executing: ${cmd}`);
-    await execAsync(cmd);
+    this.logger.log(`[RENDERER] Executing pdftoppm: ${cmd}`);
+    this.logger.log(`[RENDERER] Source PDF: "${pdfPath}" (exists=${fs.existsSync(pdfPath)})`);
+    const { stdout, stderr } = await execAsync(cmd);
+    if (stdout) this.logger.log(`[RENDERER] pdftoppm stdout: ${stdout}`);
+    if (stderr) this.logger.warn(`[RENDERER] pdftoppm stderr: ${stderr}`);
 
     const outputFile = `${outputBase}.pbm`;
     if (!fs.existsSync(outputFile)) {
-      throw new Error('Failed to render PDF');
+      this.logger.error(`[RENDERER] PBM output file not found at "${outputBase}.pbm". pdftoppm may have failed.`);
+      throw new Error(`Failed to render PDF: output file not created at "${outputBase}.pbm"`);
     }
+    const stat = await fs.promises.stat(outputFile);
+    this.logger.log(`[RENDERER] PBM output created: "${outputFile}" (${stat.size} bytes)`);
 
     return outputFile;
   }

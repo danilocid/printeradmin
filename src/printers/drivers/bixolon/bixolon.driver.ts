@@ -23,20 +23,25 @@ export class BixolonDriver implements PrinterDriver {
 
   async printRaw(data: Buffer): Promise<void> {
     const status = await this.getStatus();
+    this.logger.log(`[DRIVER] Printer status: ${status.status} (device: ${this.devicePath})`);
     if (status.status !== 'ready') {
       throw new Error(`Printer is not ready: ${status.status}`);
     }
 
     try {
+      this.logger.log(`[DRIVER] Opening device "${this.devicePath}" for write (${data.length} bytes)...`);
       const fd = await fs.promises.open(this.devicePath, 'w');
       try {
-        await fd.write(data);
+        this.logger.log(`[DRIVER] Device opened, writing ${data.length} bytes...`);
+        const { bytesWritten } = await fd.write(data);
+        this.logger.log(`[DRIVER] Write complete: ${bytesWritten}/${data.length} bytes written`);
       } finally {
         await fd.close();
+        this.logger.log(`[DRIVER] Device closed`);
       }
-      this.logger.log(`Printed ${data.length} bytes to ${this.devicePath}`);
+      this.logger.log(`[DRIVER] Successfully printed ${data.length} bytes to ${this.devicePath}`);
     } catch (error) {
-      this.logger.error(`Failed to print to ${this.devicePath}: ${error.message}`);
+      this.logger.error(`[DRIVER] Failed to print to ${this.devicePath}: ${error.message}`, error.stack);
       throw error;
     }
   }

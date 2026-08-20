@@ -24,6 +24,8 @@ export class PdfService {
   ) {}
 
   async processPdf(printerId: string, file: MultipartFile) {
+    this.logger.log(`[PDF] Starting processing for printer="${printerId}" file="${file.originalname}" size=${file.size} bytes`);
+
     const tempDir = path.join(os.tmpdir(), `print-server-${Date.now()}`);
     await fs.promises.mkdir(tempDir, { recursive: true });
 
@@ -35,32 +37,46 @@ export class PdfService {
         ? parseInt(process.env.BIXOLON_WIDTH || '576')
         : parseInt(process.env.XPRINTER_WIDTH || '400');
 
+      this.logger.log(`[PDF] Target printer width: ${targetWidth}px`);
+
+      this.logger.log(`[PDF] Step 1/5: Rendering PDF to PBM with pdftoppm at 203 DPI...`);
       const pbmPath = await this.pdfRendererService.renderPdfToImage(pdfPath, '', targetWidth);
-      this.logger.log(`PDF rendered to PBM: ${pbmPath}`);
+      const pbmStat = await fs.promises.stat(pbmPath);
+      this.logger.log(`[PDF] Step 1 OK: PBM file created at "${pbmPath}" (${pbmStat.size} bytes on disk)`);
 
+      this.logger.log(`[PDF] Step 2/5: Reading and parsing PBM header...`);
       const pbmData = await fs.promises.readFile(pbmPath);
+      this.logger.log(`[PDF] Step 2 OK: PBM file read into memory (${pbmData.length} bytes), header bytes: ${pbmData.slice(0, 16).toString('hex')}`);
       const { width: imgWidth, height: imgHeight, pixels } = this.parsePbm(pbmData);
-      this.logger.log(`PBM parsed: ${imgWidth}x${imgHeight}`);
+      this.logger.log(`[PDF] Step 2 OK: PBM dimensions=${imgWidth}x${imgHeight} pixel_data_size=${pixels.length} bytes (expected=${Math.ceil(imgWidth/8)*imgHeight})`);
 
-      const scaledPixels = this.scalePbm(pixels, imgWidth, imgHeight, targetWidth);
+      this.logger.log(`[PDF] Step 3/5: Scaling image from ${imgWidth}x${imgHeight} to ${targetWidth}x? ...`);
       const scaledHeight = Math.floor(imgHeight * (targetWidth / imgWidth));
-      this.logger.log(`Scaled to: ${targetWidth}x${scaledHeight}`);
+      const scaledPixels = this.scalePbm(pixels, imgWidth, imgHeight, targetWidth);
+      const scaledWidthBytes = Math.ceil(targetWidth / 8);
+      this.logger.log(`[PDF] Step 3 OK: Scaled to ${targetWidth}x${scaledHeight} (pixel_data=${scaledPixels.length} bytes, expected=${scaledWidthBytes * scaledHeight})`);
 
+      this.logger.log(`[PDF] Step 4/5: Building ESC/POS raster command...`);
       const escposData = this.imageToEscPos(scaledPixels, targetWidth, scaledHeight);
-      this.logger.log(`Image converted to ESC/POS: ${escposData.length} bytes`);
+      this.logger.log(`[PDF] Step 4 OK: ESC/POS buffer built (${escposData.length} bytes total)`);
+      this.logger.log(`[PDF] ESC/POS header (first 32 bytes): ${escposData.slice(0, 32).toString('hex')}`);
+      this.logger.log(`[PDF] ESC/POS structure: INIT=${escposData.slice(0,2).toString('hex')} CENTER=${escposData.slice(2,5).toString('hex')} RASTER_CMD=${escposData.slice(5,9).toString('hex')} WIDTH=${escposData.slice(9,11).toString('hex')} HEIGHT=${escposData.slice(11,13).toString('hex')} PIXELS=${scaledPixels.length}bytes FEED_CUT=${escposData.slice(13 + scaledPixels.length).toString('hex')}`);
+      this.logger.log(`[PDF] Raster command details: GS_v_0=${escposData[5].toString(16)}_${escposData[6].toString(16)}_${escposData[7].toString(16)}_${escposData[8].toString(16)} width_bytes=${escposData[9] | (escposData[10] << 8)} height=${escposData[11] | (escposData[12] << 8)}`);
 
+      this.logger.log(`[PDF] Step 5/5: Sending ${escposData.length} bytes to printer "${printerId}" via USB...`);
       await this.printersService.printRaw(printerId, escposData);
-      this.logger.log(`PDF sent to printer: ${printerId}`);
+      this.logger.log(`[PDF] Step 5 OK: All bytes written to USB device successfully`);
 
       await this.pdfRendererService.cleanup(pbmPath);
     } catch (error) {
-      this.logger.error(`Failed to process PDF: ${error.message}`);
+      this.logger.error(`[PDF] FAILED: ${error.message}`, error.stack);
       throw error;
     } finally {
       await this.pdfRendererService.cleanup(pdfPath);
       await fs.promises.rm(tempDir, { recursive: true, force: true });
     }
 
+    this.logger.log(`[PDF] Processing complete for "${file.originalname}"`);
     return { success: true };
   }
 
