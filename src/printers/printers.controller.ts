@@ -106,7 +106,7 @@ export class PrintersController {
 
     const parts: Buffer[] = [];
     parts.push(Buffer.from([ESC, 0x40]));
-    parts.push(Buffer.from([ESC, 0x61, 0x00]));
+    parts.push(Buffer.from([ESC, 0x61, 0x01]));
 
     if (mode === 'gs-v0') {
       parts.push(Buffer.from([
